@@ -22,7 +22,7 @@
 
 ### Figma Design Reference
 - **Design Link:** [Figma](https://www.figma.com/design/V5MihxWGUW5NnKm6m47xkf/iOS-Posts-App---Technical-Assessment?node-id=3009-19782&t=kuVj5MpFQeWaRoGa-1)
-- This is the same design used for our iOS/SwiftUI assessment — reused intentionally so the UI/UX bar is identical across platforms. Match colors, typography, spacing, and layout as closely as time allows.
+- Match colors, typography, spacing, and layout as closely as time allows.
 - **Given the one-day timebox, "reasonably faithful" beats "pixel-perfect."** Don't burn your day on sub-pixel alignment — prioritize correct architecture and tests first (see [Evaluation Criteria](#-evaluation-criteria-100-points)).
 - Implement responsive layouts for at least phone-size screens; tablet support is not required.
 
