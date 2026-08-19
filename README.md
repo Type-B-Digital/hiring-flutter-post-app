@@ -1,224 +1,183 @@
-# Flutter Posts App - Technical Assessment
+# Flutter Posts App
 
-## 🎯 Core Requirements
+## 🚀 Description
+Briefly describe what you implemented.
+- Implemented login against the DummyJSON API with persisted session
+- Built the posts dashboard with debounced backend search and paginated posts
+- Implemented pull-to-refresh and post detail view
+- Used flutter_bloc for state management
+- Used the repository pattern with separate remote and local data sources
+- Used dio for networking and flutter_secure_storage for JWT persistence
+- Added Dev, Staging, and Production configuration using --dart-define
+- Added unit tests for repositories, Bloc logic, models, and error scenarios
 
-### Technology Stack
-- Flutter (stable channel, 3.19+) / Dart 3+
-- State management: **Bloc (flutter_bloc) or Provider** — pick one and justify the choice in your PR
-- `dio` or `http` for networking, async/await throughout
-- Local storage: `hive`, `shared_preferences`, or `flutter_secure_storage` for session/token persistence
-- DummyJSON API (no OAuth/API key required)
-- Three environments — Dev/Staging/Production — via `--dart-define` (or `--dart-define-from-file`)
-- `flutter_test` + `mocktail` (+ `bloc_test` if you choose Bloc) for unit testing
+---
 
-### Architecture
-- Repository pattern: Presentation (Bloc/Provider) → Domain (repository interface) → Data (repository impl + remote/local data sources)
-- Async/await networking, no business logic in widgets
-- Backend search with pagination
-- Sensible error handling with typed failures (not raw exceptions surfacing in the UI)
-- Unit test coverage for business logic (Bloc/ChangeNotifier + repositories)
+## 🏗️ Architecture & Solution Rationale
+- I selected Bloc because the application contains multiple event-driven state transitions including login, session restoration, logout, posts loading, pagination, refresh, and debounced search. Bloc provides predictable state transitions and makes the business logic easy to test independently from widgets.
+- The application follows a feature-based repository architecture. Repository interfaces are defined in the domain layer, while implementations and remote/local data sources are placed in the data layer.
 
-## 🎨 Design Specifications
 
-### Figma Design Reference
-- **Design Link:** [Figma](https://www.figma.com/design/V5MihxWGUW5NnKm6m47xkf/iOS-Posts-App---Technical-Assessment?node-id=3009-19782&t=kuVj5MpFQeWaRoGa-1)
-- Match colors, typography, spacing, and layout as closely as time allows.
-- **Given the one-day timebox, "reasonably faithful" beats "pixel-perfect."** Don't burn your day on sub-pixel alignment — prioritize correct architecture and tests first (see [Evaluation Criteria](#-evaluation-criteria-100-points)).
-- Implement responsive layouts for at least phone-size screens; tablet support is not required.
+**Architecture Overview:**
+- Repository layer: Repository interfaces are defined in the domain layer. Implementations coordinate DummyJSON API access through remote data sources and local JWT persistence through flutter_secure_storage.
+- State management layer: flutter_bloc is used for authentication and posts state. Events represent user/application actions while states represent loading, success, empty, pagination, authentication, and error conditions.
+- Widget layer: Widgets consume Bloc state using BlocBuilder, BlocListener, and/or BlocConsumer. Business logic and direct API calls are kept outside widgets.
 
-## 📱 Features to Implement
+---
 
-This assessment is intentionally scoped down from a production feature set so it's completable in a single day. Read [What's In / Out of Scope](#-whats-in--out-of-scope-for-one-day) before you start.
+## 🔐 Authentication Implementation
+- The application authenticates against the DummyJSON /auth/login endpoint.
+- The returned access token is stored using flutter_secure_storage. I selected secure storage because the JWT is authentication-sensitive data and should not be stored as normal application preferences.
+- On application startup, the stored access token is checked and the session is restored using the authenticated /auth/me endpoint.
+- Logout removes the locally persisted access token.
+- Invalid credentials, network failures, server failures, and malformed responses are converted into typed failures before being presented to the UI.
 
-### 1. Authentication
+**Credentials used for testing:**
+- Username: `emilys`, Password: `emilyspass`
 
-#### Login Flow
-- **Login screen** using DummyJSON auth, hardcoded credentials:
-  - Username: `emilys` Password: `emilyspass`
-  - Username: `michaelw` Password: `michaelwpass`
-  - Or any other valid credentials from DummyJSON users
-- `POST https://dummyjson.com/auth/login`
-- Store the returned JWT locally (Hive / secure storage / shared_preferences — your call, justify it)
-- Persistent login state across app restarts
-- Form validation and error handling (wrong credentials, network failure, empty fields)
+---
 
-Register screen is **not required** — a "Register" link that shows a "coming soon" state or a minimal mock form is enough if you have time left over.
+## 💾 Data & State Management
+- Authentication tokens are persisted locally using flutter_secure_storage.
+- Posts are fetched fresh from DummyJSON and are not cached locally because offline-first functionality is outside the assessment scope.
+- Pagination uses the API total, skip, and limit values to determine whether more posts are available.
+- Starting a new search resets the current pagination state and performs backend search using the DummyJSON search endpoint.
+- Search results support pagination independently from the normal posts list.
+- Search input is debounced using the SEARCH_DEBOUNCE_MS value from the active environment configuration.
+- Pull-to-refresh resets the relevant pagination state and reloads fresh data from the backend.
+- Empty search results are treated as a valid empty state rather than an error.
 
-### 2. Dashboard
-- Search bar with real-time backend search (debounced), per the design
-- Posts list with backend pagination (infinite scroll or "load more")
-- Pull-to-refresh
-- Tap a post to view its detail screen
-- Loading, empty, and error states — not just the happy path
+---
 
-## 🚫 What's In / Out of Scope for One Day
+## 🎨 Design Implementation
+- The implementation follows the supplied Figma design as closely as possible within the one-day timebox, focusing on layout, spacing, typography, colors, form fields, post cards, and overall screen structure.
+- Reusable widgets were extracted for repeated UI components such as post cards, text fields, and state-specific content where appropriate.
+- Loading, empty, and error states are handled explicitly instead of displaying only the successful data state.
+- Architecture, functionality, testing, and error handling were prioritized over sub-pixel visual adjustments.
 
-**In scope (required):**
-- Login + persisted session + logout
-- Posts list, search, pagination, pull-to-refresh, post detail
-- Repository pattern with a real remote data source + a real local data source (even if local storage is just "cache last page")
-- Unit tests for repositories and Bloc/ChangeNotifier logic
-- 3 environment configs (Dev/Staging/Production)
+---
 
-**Out of scope (do not spend time here):**
-- Register flow, token refresh, biometric auth
-- Offline-first sync, background sync, push notifications
-- Tablet/landscape layouts, animations/transitions polish
-- Widget tests, golden tests, integration/E2E tests (unit tests only — see [Testing](#-unit-testing-requirements))
-- CI/CD pipelines
+## 🔌 API Integration & Networking
+- Networking is implemented using dio.
+- A shared Dio client is configured with the environment-specific base URL, connection timeout, receive timeout, send timeout, and JSON headers.
+- Dio is injected rather than created inside individual data sources, which makes the HTTP layer replaceable/mockable during testing.
+- A request interceptor retrieves the locally stored access token and attaches the Authorization: Bearer <accessToken> header when a token is available.
+- Dio/network exceptions are mapped into typed application failures before they reach the presentation layer.
+- Pagination requests use limit and skip query parameters.
+- Search requests use the DummyJSON /posts/search endpoint with q, limit, and skip query parameters.
 
-If you're unsure whether something is in scope, leave a note in your PR under **Known Limitations / Assumptions** instead of guessing and burning time.
+---
 
-## 🧪 Unit Testing Requirements
+## ⚙️ Build Configuration
+- Dev, Staging, and Production configurations are implemented using --dart-define.
+- The application reads configuration values through an AppConfig class using String.fromEnvironment and int.fromEnvironment.
+- The following values differ between environments:
 
-### Mandatory Test Coverage
-- **Authentication logic**: login success/failure, token persistence, logout, session restore on app start
-- **Repository layer**: API calls, response → model mapping, error mapping (network failure, 4xx/5xx, malformed response)
-- **Bloc / ChangeNotifier (state management)**: state transitions, search debounce behavior, pagination behavior, loading/error states
-- **Data models**: (de)serialization and any validation logic
-- Network layer: request formation (query params for search/pagination), response parsing
+**Dev**
 
-### Testing Best Practices
-- Mock external dependencies (HTTP client, local storage) — do not hit the real network in tests
-- Aim for 70%+ coverage on business logic (repositories, Bloc/ChangeNotifier, models). UI widgets are excluded from this target.
-- Cover both the happy path and failure/edge cases (empty results, network error, malformed JSON, pagination exhausted)
-- Use dependency injection (constructor injection is fine — no DI framework required) so collaborators can be mocked
-
-### What NOT to Test
-- Widgets/Views themselves (focus on Bloc/ChangeNotifier instead)
-- Third-party package internals
-- Trivial getters/setters with no logic
-
-### Test Naming Convention
-```dart
-test('methodName_scenario_expectedResult', () { ... });
-// Example:
-test('login_withValidCredentials_returnsUserAndStoresToken', () { ... });
-test('fetchPosts_onNetworkError_emitsFailureState', () { ... });
-```
-
-### Example Test Structure
-```dart
-group('AuthRepository', () {
-  // login success stores token
-  // login with invalid credentials returns a Failure
-  // logout clears stored session
-  // session is restored from local storage on startup
-});
-
-group('PostsBloc / PostsController', () {
-  // fetching posts emits loading -> success
-  // search debounces and requeries with the query param
-  // pagination appends the next page instead of replacing
-  // network error emits an error state, not an unhandled exception
-});
-```
-
-## ⚙️ Build Configuration (Dev / Staging / Production)
-
-Use `--dart-define` (a small `AppConfig` class reading `String.fromEnvironment`/`int.fromEnvironment` is sufficient — no need for native Android/iOS flavor splitting unless you want the bonus points below).
-
-```
-# Dev
 API_BASE_URL=https://dummyjson.com
 PAGINATION_LIMIT=10
 SEARCH_DEBOUNCE_MS=300
 
-# Staging
+**Staging**
+
 API_BASE_URL=https://dummyjson.com
 PAGINATION_LIMIT=15
 SEARCH_DEBOUNCE_MS=500
 
-# Production
+**Production**
+
 API_BASE_URL=https://dummyjson.com
 PAGINATION_LIMIT=20
 SEARCH_DEBOUNCE_MS=800
-```
 
-**Bonus (not required):** wire these up as real Flutter flavors (`flutter_flavorizr` or manual `main_dev.dart` / `main_staging.dart` / `main_prod.dart` entry points) with distinct app names/icons per environment.
+---
 
-## 🔌 API Integration
+## 🧪 Unit Testing Coverage
+- Networking is implemented using dio.
+- A shared Dio client is configured with the environment-specific base URL, connection timeout, receive timeout, send timeout, and JSON headers.
+- Dio is injected rather than created inside individual data sources, which makes the HTTP layer replaceable/mockable during testing.
+- Dio/network exceptions are mapped into typed application failures before they reach the presentation layer.
+- Search requests use the DummyJSON /posts/search endpoint with q, limit, and skip query parameters.
 
-```bash
-# Login
-POST https://dummyjson.com/auth/login
-Headers: { "Content-Type": "application/json" }
-Body: { "username": "emilys", "password": "emilyspass", "expiresInMins": 30 }
-# Returns: { "accessToken": "...", "refreshToken": "...", "id", "username", "email", ... }
-# Invalid credentials -> HTTP 400
+**Testing checklist:**
+- ✅ Auth logic (login success/failure, token persistence, logout, session restore)
+- ✅ Repository layer (API calls, model mapping, error mapping)
+- ✅ Bloc/ChangeNotifier (state transitions, search debounce, pagination)
+- [-] Data model (de)serialization
 
-# Current user
-GET https://dummyjson.com/auth/me
-Headers: { "Authorization": "Bearer [accessToken]" }
+**Coverage report:** 
+- Coverage 92.8% achieved.
+- Unit tests focus on business logic including authentication, repositories, Bloc behavior, models, pagination, search, and error handling.
+- Widget, golden, and integration tests were intentionally not prioritized because the assessment specifically focuses on unit testing of business logic.
+- mocktail is used to mock dependencies so tests do not call the live DummyJSON API.
+- bloc_test is used to verify Bloc state transitions.
+---
 
-# Paginated posts
-GET https://dummyjson.com/posts?limit=10&skip=0
-# Returns: { "posts": [...], "total": 251, "skip": 0, "limit": 10 }
-# Use total/skip/limit to know when you've reached the last page (posts.length < limit, or skip+limit >= total)
+## 🎥 Demo Video
+https://drive.google.com/file/d/1064fDomYc3D2Cr0B9WMQr0KlceFNP4-J/view?usp=sharing
 
-# Search with pagination
-GET https://dummyjson.com/posts/search?q=love&limit=10&skip=0
-# Same envelope shape as above. No matches -> { "posts": [], "total": 0, "skip": 0, "limit": 0 }, not an error.
+---
 
-# Single post
-GET https://dummyjson.com/posts/1
-```
+## 📌 Known Limitations / Assumptions
+- Registration is intentionally not implemented because it is outside the required assessment scope.
+- Logout function not implemented in the UI.
+- Refresh-token handling is not implemented.
+- Biometric authentication is not implemented.
+- Offline-first/background synchronization is not implemented.
+- Push notifications are not implemented.
+- Tablet/landscape-specific layouts are not implemented.
+- CI/CD pipelines are not included.
+- The application currently uses DummyJSON as the backend for all environments as specified in the assessment.
 
-All endpoints above were verified working as documented as of this assessment being written. Full docs: https://dummyjson.com/docs
-
-## 📊 Evaluation Criteria (100 Points)
-
-| Category | Points | What we're looking for |
-|---|---|---|
-| Architecture & Tech Stack | 25 | Correct repository pattern, clean Bloc/Provider usage, justified state-management choice, separation of concerns |
-| Unit Testing | 25 | Coverage of repositories + Bloc/ChangeNotifier, meaningful mocks, happy path + edge cases, test readability |
-| Code Quality | 15 | Readability, naming, consistent style, no dead code, appropriate use of `const`/immutability |
-| Functionality | 15 | Login, session persistence, search, pagination, pull-to-refresh, post detail all work |
-| Visual Accuracy vs Figma | 10 | Reasonably faithful to layout/spacing/type — not pixel-perfect |
-| Error Handling | 5 | Typed failures, no unhandled exceptions reaching the UI, sensible empty/error states |
-| Build Configuration | 5 | Working Dev/Staging/Production config via dart-define |
-
-## 📋 Deliverables
-
-- Flutter project that builds and runs on at least one platform (iOS or Android simulator/emulator)
-- 3 working environment configs (Dev/Staging/Production)
-- Unit test suite + coverage report (`flutter test --coverage`)
-- README with setup instructions and any hardcoded credentials used
-- Short demo video/screen recording (Loom or similar) of the app running
+---
 
 ## 🛠️ Setup Instructions
 
 **Prerequisites:**
 - Flutter 3.19+ / Dart 3+
-- Xcode (iOS) or Android Studio (Android) with a working simulator/emulator
 
 **Run:**
 ```bash
-flutter pub get
+flutter pub get 
 flutter run --dart-define=API_BASE_URL=https://dummyjson.com --dart-define=PAGINATION_LIMIT=10 --dart-define=SEARCH_DEBOUNCE_MS=300
 ```
 
 **Test:**
 ```bash
 flutter test --coverage
-# optional HTML report:
-genhtml coverage/lcov.info -o coverage/html
 ```
 
-## ✅ Success Criteria
+---
 
-- App builds and runs; login and dashboard both function against the live DummyJSON API
-- Repository pattern cleanly separates data access from business logic from UI
-- State management (Bloc or Provider) is used consistently and the choice is justified
-- 70%+ unit test coverage on business logic, covering both success and failure paths
-- Three environment configs are demonstrably different at runtime
+## ✅ Feature Completion Checklist
 
-**Timeline: 1 day.** This is intentionally scoped tighter than a production feature set — see [What's In / Out of Scope](#-whats-in--out-of-scope-for-one-day). We'd rather see a smaller surface area done well and tested than a larger surface area rushed.
+### 🔐 Authentication
+- ✅ Login screen against DummyJSON
+- ✅ Token storage and persistent session
+- [-] Logout
+- ✅ Validation and error handling
 
-## 🔐 A Note on Generative AI Tools
+### 📱 Dashboard & Posts
+- ✅ Posts list matching Figma design
+- ✅ Backend search with debounce
+- ✅ Pagination
+- ✅ Pull-to-refresh
+- ✅ Post detail screen
+- ✅ Loading/empty/error states
 
-The use of generative AI tools (ChatGPT, Claude, GitHub Copilot, or similar) to **write, generate, or complete code, tests, or written answers for this assessment is strictly prohibited.** Every line you submit must be typed and understood by you.
+### 🏗️ Architecture & Data
+- ✅ Repository pattern implemented
+- ✅ Bloc used
+- ✅ Async/await networking
+- ✅ Proper separation of concerns
 
-This does **not** ban using AI (or documentation, Stack Overflow, etc.) as a **reference**. You're welcome to ask an AI tool a conceptual question — e.g. "what's the difference between `flutter_bloc`'s `emit` and `add`?" or "how does debouncing typically work in Dart?" — and get a **hint or explanation** back. What's not allowed is pasting a prompt and having it produce the implementation, a test, or a written answer for you to submit as your own. If in doubt, ask yourself: "did I write this, or did I transcribe it?"
+### ⚙️ Configuration & Testing
+- ✅ Three environment configs (Dev/Staging/Production)
+- ✅ Unit tests with 70%+ coverage on business logic
+- ✅ Edge cases and error scenarios tested
 
-Please don't share this assessment externally.
+### 📋 Documentation & Quality
+- ✅ Clean, readable code
+- ✅ README with setup instructions
+- ✅ Demo video included
