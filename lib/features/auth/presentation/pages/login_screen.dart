@@ -84,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     hasScrollBody: false,
                     child: Column(
                       children: [
-                        const Spacer(),
+                        const SizedBox(height: 200,),
                         SafeArea(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,

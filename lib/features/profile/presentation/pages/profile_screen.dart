@@ -118,7 +118,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         width: 96,
                         height: 96,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2DC28D),
+                          color: (networkImage == null || networkImage.isEmpty)
+                              ? const Color(0xFF2DC28D)
+                              : Colors.transparent,
+                          border: Border.all(color: AppColors.primary1, width: 2),
                           shape: BoxShape.circle,
                           image: _imageFile != null
                               ? DecorationImage(

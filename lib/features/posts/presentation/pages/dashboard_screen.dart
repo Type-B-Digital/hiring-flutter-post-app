@@ -9,6 +9,8 @@ import '../bloc/posts_event.dart';
 import '../bloc/posts_state.dart';
 import '../widgets/post_list_item.dart';
 import '../widgets/featured_post_card.dart';
+import '../widgets/featured_post_skeleton.dart';
+import '../widgets/post_list_item_skeleton.dart';
 import '../../../profile/presentation/pages/profile_screen.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -115,21 +117,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             networkImage = user.image;
                           }
 
-                          return CircleAvatar(
-                            backgroundColor: AppColors.primary3,
-                            radius: 20,
-                            backgroundImage: (networkImage != null &&
-                                    networkImage.isNotEmpty)
-                                ? NetworkImage(networkImage)
-                                : null,
-                            child:
-                                (networkImage == null || networkImage.isEmpty)
-                                    ? Text(initials,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(color: AppColors.white))
-                                    : null,
+                          return Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.primary1,
+                                width: 2.0,
+                              ),
+                            ),
+                            child: CircleAvatar(
+                              backgroundColor:
+                                  (networkImage == null || networkImage.isEmpty)
+                                      ? AppColors.primary3
+                                      : Colors.transparent,
+                              radius: 18,
+                              backgroundImage: (networkImage != null &&
+                                      networkImage.isNotEmpty)
+                                  ? NetworkImage(networkImage)
+                                  : null,
+                              child:
+                                  (networkImage == null || networkImage.isEmpty)
+                                      ? Text(initials,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(color: AppColors.white))
+                                      : null,
+                            ),
                           );
                         },
                       ),
@@ -179,9 +193,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: BlocBuilder<PostsBloc, PostsState>(
                   builder: (context, state) {
                     if (state.status == PostsStatus.initial) {
-                      return const Center(
-                          child: CircularProgressIndicator(
-                              color: AppColors.primary1));
+                      return ListView.builder(
+                        clipBehavior: Clip.none,
+                        padding: const EdgeInsets.only(
+                            left: 24.0, right: 24.0, bottom: 30, top: 8),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: 3,
+                        itemBuilder: (context, index) {
+                          return const FeaturedPostSkeleton();
+                        },
+                      );
                     }
                     if (state.posts.isEmpty) {
                       return const Center(
@@ -227,10 +248,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             BlocBuilder<PostsBloc, PostsState>(
               builder: (context, state) {
                 if (state.status == PostsStatus.initial) {
-                  return const SliverToBoxAdapter(
-                    child: Center(
-                        child: CircularProgressIndicator(
-                            color: AppColors.primary1)),
+                  return SliverPadding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24.0, vertical: 8.0),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (BuildContext context, int index) {
+                          return const PostListItemSkeleton();
+                        },
+                        childCount: 5,
+                      ),
+                    ),
                   );
                 }
                 if (state.status == PostsStatus.failure &&
@@ -269,11 +297,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     delegate: SliverChildBuilderDelegate(
                       (BuildContext context, int index) {
                         if (index >= state.posts.length) {
+                          if (state.status == PostsStatus.failure) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Column(
+                                children: [
+                                  const Text('Failed to load more posts', style: TextStyle(color: AppColors.critical)),
+                                  TextButton(
+                                    onPressed: () => context.read<PostsBloc>().add(PostsFetched()),
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 16),
-                            child: Center(
-                                child: CircularProgressIndicator(
-                                    color: AppColors.primary1)),
+                            child: PostListItemSkeleton(),
                           );
                         }
                         return PostListItem(post: state.posts[index]);

@@ -13,6 +13,7 @@ class AppTextField extends StatelessWidget {
   final BorderRadius? borderRadius;
   final TextStyle? hintStyle;
   final EdgeInsetsGeometry? contentPadding;
+  final InputBorder? focusedBorder;
 
   const AppTextField({
     super.key,
@@ -27,10 +28,13 @@ class AppTextField extends StatelessWidget {
     this.borderRadius,
     this.hintStyle,
     this.contentPadding,
+    this.focusedBorder,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveBorderRadius = borderRadius ?? BorderRadius.circular(8);
+
     return TextFormField(
       controller: controller,
       obscureText: obscureText,
@@ -54,17 +58,18 @@ class AppTextField extends StatelessWidget {
         filled: true,
         isDense: true,
         border: OutlineInputBorder(
-          borderRadius: borderRadius ?? BorderRadius.circular(8),
+          borderRadius: effectiveBorderRadius,
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: effectiveBorderRadius,
           borderSide: BorderSide.none,
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: AppColors.primary1, width: 2),
-        ),
+        focusedBorder: focusedBorder ??
+            OutlineInputBorder(
+              borderRadius: effectiveBorderRadius,
+              borderSide: const BorderSide(color: AppColors.primary1, width: 2),
+            ),
       ),
     );
   }

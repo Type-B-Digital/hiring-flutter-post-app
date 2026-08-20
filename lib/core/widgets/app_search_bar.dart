@@ -28,6 +28,10 @@ class AppSearchBar extends StatelessWidget {
         contentPadding:
             const EdgeInsets.only(left: 12, top: 12, bottom: 12, right: 12),
         borderRadius: BorderRadius.circular(200),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(200),
+          borderSide: BorderSide.none,
+        ),
         prefixIcon: const Padding(
           padding: EdgeInsets.only(left: 12, right: 8),
           child: Icon(Icons.search, color: AppColors.secondary, size: 20),
