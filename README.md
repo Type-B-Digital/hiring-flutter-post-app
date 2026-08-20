@@ -1,156 +1,153 @@
 # NewsBay — Flutter Posts App
 
-A Flutter app that logs in against the [DummyJSON](https://dummyjson.com) API and browses its posts with backend search and pagination. Built against the "Flutter Posts App" technical assessment spec.
+A Flutter app built against the [DummyJSON](https://dummyjson.com) API — login, browse posts with search + pagination, view post details.
 
-## 🚀 Description
+## What it does
 
-- Implemented login against the DummyJSON API (`POST /auth/login`) with a persisted, server-validated session
-- Built a posts list (`post_list_screen.dart`) with debounced backend search and infinite-scroll pagination, using a masonry grid so cards size to their own content
-- Built a post detail screen and a minimal profile screen (avatar initials, name, logout)
-- Used **Provider** (ChangeNotifier) + a lightweight repository layer (interface + impl) for posts and auth
-- Wired three environments (Dev/Staging/Production) via `--dart-define`, with `PAGINATION_LIMIT` and `SEARCH_DEBOUNCE_MS` actually affecting app behavior per environment
+- Login against DummyJSON's `POST /auth/login`, with a session that persists across restarts and gets re-validated against the server.
+- Post list (`post_list_screen.dart`) with debounced search and infinite-scroll pagination.
+- Post detail screen, plus a minimal profile screen.
+- Provider (ChangeNotifier) for state management, with a small repository layer sitting in front of the API.
+- Three environments (dev/staging/prod) wired through `--dart-define`.
 
 ---
 
-## 🛠️ Setup Instructions
+## Setup
 
-**Prerequisites:**
-- Flutter 3.19+ / Dart 3+
+Needs Flutter 3.19+ / Dart 3+.
 
-**Run:**
 ```bash
 flutter pub get
 
-# Dev
+# dev
 flutter run --dart-define=FLAVOR=DEVELOPMENT --dart-define=API_BASE_URL=https://dummyjson.com --dart-define=PAGINATION_LIMIT=10 --dart-define=SEARCH_DEBOUNCE_MS=300
 
-# Staging
+# staging
 flutter run --dart-define=FLAVOR=STAGING --dart-define=API_BASE_URL=https://dummyjson.com --dart-define=PAGINATION_LIMIT=15 --dart-define=SEARCH_DEBOUNCE_MS=500
 
-# Production
+# production (defaults already match production, so this alone works too)
 flutter run --dart-define=FLAVOR=PRODUCTION --dart-define=API_BASE_URL=https://dummyjson.com --dart-define=PAGINATION_LIMIT=20 --dart-define=SEARCH_DEBOUNCE_MS=800
 ```
 
-**Test:**
+Run tests:
 ```bash
 flutter test --coverage
 ```
 
-**Test credentials:**
-- Username: `emilys`, Password: `emilyspass` (pre-filled in the login form)
+Test login: `emilys` / `emilyspass`
 
 ---
 
-## 🏗️ Architecture & Solution Rationale
+## Why Provider, not Bloc
 
-**Provider over Bloc:** chosen for the size of this app — a handful of screens with fairly simple state transitions (loading/data/error, logged-in/out). Bloc's event→state ceremony would add boilerplate without buying much here; `ChangeNotifier` + `Consumer`/`context.watch` covers everything needed with less code to read.
+Went with Provider mostly because this app is small in scope and I'm just more comfortable with it — I haven't used Bloc enough to move fast with it.
 
-**Repository layer:** each feature has an abstract interface (`AuthRepository`, `PostRepository`) with a concrete `*Impl` class in the *same file* — a deliberate simplification from a stricter "interface file / impl file / remote data source file / local data source file" split. For a repository this small (2-3 methods each, one HTTP client), that split felt like ceremony without payoff. The one genuine separate data source is `SessionStorage` (shared_preferences wrapper) for auth's local persistence; the "remote data source" for both features is just the `dio` calls inline in the `*Impl` class.
+## Architecture
 
-**Tradeoffs given the timebox:**
-- No typed `Failure` class hierarchy (`NetworkFailure`/`AuthFailure`/etc.) — repositories catch `DioException` and rethrow a plain `Exception` with a friendly message instead. Widgets never see a raw exception, but it's not the fully "typed" version the spec describes.
-- No native Android/iOS flavor splitting — environments are `--dart-define` only.
-- Scope trimmed to Login → Post List → Post Detail (+ a minimal Profile screen), matching what was actually specified in writing; the Figma file's Dashboard/Friends/Followers/Chat frames weren't built since they weren't in the written requirements.
+- `lib/repository/` — `AuthRepository`/`PostRepository` as interfaces with `*Impl` classes doing the actual Dio calls. `SessionStorage` wraps `shared_preferences` for the session.
+- `AuthProvider` handles login/logout/session state, `PostProvider` handles the post list/search/pagination state.
+- Screens read state with `context.watch`/`Consumer<T>` and call into providers with `context.read<T>().method()`. Navigation is `GoRouter`.
 
-**Architecture Overview:**
-- **Repository layer:** `AuthRepository`/`PostRepository` interfaces + `*Impl` (dio calls) in `lib/repository/`; `SessionStorage` (shared_preferences) as the local data source for the session.
-- **State management layer:** `AuthProvider` (login/logout/session state) and `PostProvider` (list/search/pagination state), both `ChangeNotifier`s in `lib/provider/`, constructed once in `main()` and provided via `MultiProvider`.
-- **Widget layer:** screens read state via `context.watch`/`Consumer<T>` and dispatch actions via `context.read<T>().method()`; `GoRouter`'s `redirect` reacts to `AuthProvider` (via `refreshListenable`) to gate `/posts`/`/profile` behind login.
-
----
-
-## 🔐 Authentication Implementation
-
-**Token storage:** `shared_preferences` (`lib/repository/session_storage.dart`), storing the whole `AuthUser` (profile + `accessToken`/`refreshToken`) as one JSON string. Chose this over `flutter_secure_storage`/Hive because DummyJSON issues short-lived sandbox tokens with nothing sensitive behind them — the extra native-platform setup secure storage needs isn't worth it here, though it would be the right call for a real production token.
-
-**Session persistence across restarts:** `main()` awaits `AuthRepository.restoreSession()` *before* `runApp()`, so the very first frame already knows whether the user is logged in — no splash screen or transitional loading state needed. `restoreSession()` doesn't just trust whatever's cached locally: it calls `GET /auth/me` with the saved token as a Bearer header to confirm the server still accepts it.
-- Token still valid → session kept.
-- Server rejects it (confirmed via testing: DummyJSON returns inconsistent status codes — 500 for a malformed token, presumably 401 for a cleanly-expired one — so *any* real error response is treated as rejection) → session cleared, user routed to `/login`.
-- Server unreachable (offline/timeout) → session is kept regardless ("fails open"), so a bad connection at launch doesn't wrongly log out a legitimately signed-in user.
-
-**Error handling:** empty-field validation on the form; wrong credentials and network failures are caught in `AuthRepositoryImpl` and mapped to friendly strings (`"Invalid username or password."`, `"No internet connection. Please try again."`), surfaced via `AuthProvider.errorMessage` and shown inline under the password field.
+Tradeoffs given the timebox:
+- Repositories catch `DioException` and rethrow a plain `Exception` with a only a friendly message.
+- Auth only gets re-checked when the app relaunches, not while it's already open.
+- Kept the UI minimal on purpose.
+- `GoRouter`'s redirect always reads from local storage, so it won't fall back to login mid-navigation if the session expires while you're already in the app.
 
 ---
 
-## 💾 Data & State Management
+## Auth
 
-**Cached vs. fresh:** only the auth session is cached locally (shared_preferences). Posts are always fetched fresh from the API — no local post cache/database, since DummyJSON's `/posts` is fast and cheap to call and there's no offline-browsing requirement.
+Session is stored in `shared_preferences` (`lib/repository/session_storage.dart`) as one JSON blob — the whole `AuthUser`, including both tokens. Not how I'd do it for something real, but DummyJSON's tokens are short-lived sandbox tokens anyway, so it didn't feel worth the extra setup here.
 
-**Pagination + search interaction:** `PostProvider` holds a single `_searchQuery` string. Both `fetchInitial()` and `fetchMore()` funnel through a private `_fetchPage({skip})` helper that picks `getPosts` or `searchPosts` based on whether `_searchQuery` is empty — so pagination transparently continues through search results using the same `skip`/`limit` mechanism as normal browsing. `hasMore` is derived from the API's own `total`/`skip`/response-length rather than tracked separately.
+On startup, `main()` awaits `AuthRepository.restoreSession()` before `runApp()`, so the very first frame already knows whether you're logged in — no splash screen or loading flash needed. That restore doesn't just trust whatever's cached locally either — it calls `GET /auth/me` with the saved token to check the server still accepts it:
+- token still valid → session kept
+- server rejects it → session cleared, sent to `/login` (DummyJSON's error codes are inconsistent here — I saw 500 for a malformed token and presumably 401 for an expired one — so any error response gets treated as a rejection)
+- server unreachable (offline/timeout) → session kept anyway, fails open
 
-**Debounce:** `PostSearchField` (`lib/widgets/search_bar.dart`) uses a `dart:async` `Timer`, cancelling and restarting on every keystroke, only calling `PostProvider.search()` after `AppConfig.searchDebounceMs` of no typing (300/500/800ms across Dev/Staging/Production).
-
----
-
-## 🎨 Design Implementation
-
-Matched the Figma file's login screen closely: color palette values were sampled directly from the exported PNG's pixels (not just the labeled swatches) — this caught that the login header's gradient doesn't actually end at the labeled "Primary2" swatch (a near-black green), but at a much lighter muted teal; the code follows the sampled value, not the mislabeled swatch. Used `google_fonts` (Poppins) app-wide, pill-shaped buttons/inputs, and rounded cards to match the mockup's visual language.
-
-**Cut corners given the timebox:**
-- Only Login, Post List, and Post Detail were built to match the design; the Figma file's Dashboard/Profile/Friends/Followers/Chat frames go beyond the written spec and weren't implemented (a minimal Profile screen — avatar initials, name, logout — was added since the app bar needed *somewhere* for the logout action to live, but it doesn't match any specific Figma frame).
-- The Post List doesn't replicate the mockup's "Featured Posts" horizontal carousel + "Recent Posts" split — it's a single masonry grid, since DummyJSON's posts have no "featured" concept.
-- "Forgot password?" and "Sign up" on the login screen are currently inert (no dialog, no action) — an earlier iteration had a "coming soon" dialog wired to both, which was later removed to simplify layout and never re-added. **Known gap**, see below.
-
-**Custom widgets:** `PostCard` (masonry-friendly card with an even-on-all-sides shadow via a custom `BoxShadow`, since Material's `Card` elevation only really shows on the bottom); `PostSearchField` (debounced); `LoadingView`/`ErrorView` (generic, reused across list/detail states).
-
-**Loading/empty/error states:** spinner (`LoadingView`) on first load; `ErrorView` with a retry button on failure; centered "No posts found" text when a search returns nothing; a small spinner footer at the bottom of the list while a `fetchMore()` page load is in flight.
+Form validation is just empty-field checks; wrong credentials and network errors get caught in `AuthRepositoryImpl` and mapped to friendly strings ("Invalid username or password.", "No internet connection. Please try again."), shown under the password field via `AuthProvider.errorMessage`.
 
 ---
 
-## 🔌 API Integration & Networking
+## Data & state
 
-**dio setup:** a single `Dio` instance built once in `main()` with `baseUrl: AppConfig.baseUrl` (from `--dart-define=API_BASE_URL`), shared by both `AuthRepositoryImpl` and `PostRepositoryImpl`.
+Only the session gets cached locally — posts are always fetched fresh from the API, no local DB.
 
-**Error mapping strategy:** `DioException` → caught inside the repository → mapped to a plain `Exception` carrying a human-readable message → caught again in the relevant `Provider`, exposed as a `String?` (`errorMessage`/`error`) → rendered directly in the UI. No raw exception or status code ever reaches a widget. (As noted above, this is a plain-string approach rather than a typed `Failure` hierarchy — a conscious simplification, not an oversight.)
+`PostProvider` keeps a single `_searchQuery`, and both `fetchInitial()` and `fetchMore()` go through one private `_fetchPage({skip})` helper that picks `getPosts` or `searchPosts` depending on whether there's a query — so pagination just keeps working the same way whether you're browsing or searching, using the same `skip`/`limit` mechanics. `hasMore` comes from the API's own `total`/`skip`/response length, nothing tracked separately.
 
-**Pagination and search request handling:** `GET /posts?skip=&limit=` for browsing, `GET /posts/search?q=&skip=&limit=` for search — both parsed into the same `PostPage` model (`posts`, `total`, `skip`, `limit`, with a computed `hasMore`).
-
----
-
-## ⚙️ Build Configuration
-
-`--dart-define` with a plain `AppConfig` class (`lib/app_config.dart`) reading `String.fromEnvironment`/`int.fromEnvironment` — no native flavor splitting.
-
-- `FLAVOR` (`DEVELOPMENT`/`STAGING`/`PRODUCTION`) picks sensible **per-environment defaults** for `PAGINATION_LIMIT` (10/15/20) and `SEARCH_DEBOUNCE_MS` (300/500/800) — so `--dart-define=FLAVOR=PRODUCTION` alone is enough to get production's values.
-- Any of `PAGINATION_LIMIT`/`SEARCH_DEBOUNCE_MS`/`API_BASE_URL` can still be passed explicitly and will override the flavor-derived default.
-- `API_BASE_URL` is intentionally identical across all three environments (`https://dummyjson.com`) — DummyJSON only exposes one public host, so there's nothing real to point environments at differently; the plumbing to do so is in place regardless.
-
-**What actually differs between environments:** page size per request and search debounce delay — verified by running each flavor and observing the post list/search behavior change accordingly.
+Search is debounced with a plain `dart:async` `Timer` that cancels and restarts on every keystroke, only calling `PostProvider.search()` after `AppConfig.searchDebounceMs` of no typing.
 
 ---
 
-## 🧪 Unit Testing Coverage
+## Design
 
-**Coverage achieved:** 28.1% overall (`flutter test --coverage`, `coverage/lcov.info`), concentrated entirely in the state-management layer:
-- `lib/provider/auth_provider.dart` — 100% (14/14 lines)
-- `lib/provider/post_provider.dart` — 60% (21/35 lines)
-- Repository layer, models, and `app_config.dart` — 0% (untested)
+Tried to match the Figma login screen pretty closely — pulled the color palette straight from the exported PNG's pixels, and used `google_fonts` (Poppins) app-wide to get as close to the mockup as I could.
 
-**What's tested vs. not, and why:** given the one-day timebox and still-growing familiarity with Flutter's testing tools (mocktail, dio mocking), coverage was prioritized on `AuthProvider`/`PostProvider` — the most behavior-dense, most bug-prone code, and the layer a bug in would be most visible to a user. Repository-layer tests (mocking `dio` directly — `registerFallbackValue`, argument matchers, `DioException` type discrimination) and model (de)serialization tests were left out; those are the natural next layer to add coverage to, but weren't reached in the time available.
+Corners cut given the timebox:
+- Only built Login, Post List, and Post Detail to match the design — the Figma file has Dashboard/Profile/Friends/Followers/Chat frames that go beyond the written spec, so those got skipped. The Profile screen that exists is minimal (avatar initials, name, logout) and doesn't match any specific Figma frame — it's mainly there because the logout action needed somewhere to live.
+- Didn't replicate the mockup's "Featured Posts" carousel + "Recent Posts" split on the post list — it's a single masonry grid, since DummyJSON posts don't really have a "featured" concept to hang that on.
+- "Forgot password?" and "Sign up" on the login screen don't do anything right now. There was a "coming soon" dialog wired up to both at one point, it got removed during a layout cleanup, and I never got around to putting it back. Known gap, listed again below.
 
-**Mocking approach:** `mocktail`, mocking the repository *interfaces* (`AuthRepository`, `PostRepository`) rather than `dio` directly — this keeps the provider tests fast and simple, at the cost of not covering the HTTP-error-mapping logic inside the repository implementations themselves.
+Custom widgets: `PostCard`, `PostSearchField`, `LoadingView`, `ErrorView`.
 
-**Testing checklist:**
-- [x] Auth logic (login success/failure, logout) — session persistence/restore and the `/auth/me` expiry check are implemented but not unit tested
+Loading/empty/error states: spinner on first load, retry button on failure, centered "No posts found" text for empty search results, small spinner footer at the bottom of the list while loading more.
+
+---
+
+## API / networking
+
+One `Dio` instance built once in `main()` with `baseUrl: AppConfig.baseUrl` (from `--dart-define=API_BASE_URL`), shared by both `AuthRepositoryImpl` and `PostRepositoryImpl`.
+
+Posts: `GET /posts?skip=&limit=` for browsing, `GET /posts/search?q=&skip=&limit=` for search.
+
+---
+
+## Build config
+
+`--dart-define` flows into a plain `AppConfig` class (`lib/app_config.dart`) via `String.fromEnvironment`/`int.fromEnvironment`.
+
+- `FLAVOR` (`DEVELOPMENT`/`STAGING`/`PRODUCTION`) picks sensible per-environment defaults for `PAGINATION_LIMIT` (10/15/20) and `SEARCH_DEBOUNCE_MS` (300/500/800) — so `--dart-define=FLAVOR=PRODUCTION` alone gets you production's values.
+- Any of `PAGINATION_LIMIT`/`SEARCH_DEBOUNCE_MS`/`API_BASE_URL` can still be passed explicitly to override the flavor default.
+- `API_BASE_URL` is the same across all three environments on purpose — DummyJSON only has the one public host, so there's nowhere else to point it. The plumbing for different hosts is still there if it's ever needed.
+
+What actually changes between environments right now: page size per request and search debounce delay — checked this by running each flavor and watching the list/search behavior.
+
+---
+
+## Tests
+
+Only got to the state-management layer — `AuthProvider` and `PostProvider`. Given the one-day timebox and still being fairly new to Flutter's testing tools (mocktail, mocking Dio), I prioritized coverage there over the repository/model layers.
+
+Used `mocktail` to mock the repositories (`AuthRepository`, `PostRepository`).
+
+What's covered:
+- [x] Auth logic (login success/failure, logout) — session persistence/restore and the `/auth/me` expiry check aren't unit tested
 - [ ] Repository layer (API calls, model mapping, error mapping)
-- [x] ChangeNotifier state transitions (loading/error/success for both providers, search updating the list) — pagination (`fetchMore`) specifically isn't covered
-- [ ] Data model (de)serialization
+- [x] Provider state transitions (loading/error/success for both providers, search updating the list) — pagination (`fetchMore`) specifically isn't covered
+- [ ] Model (de)serialization
 
-**Coverage report:** 28.1% total; 100%/60% on `AuthProvider`/`PostProvider` respectively (see breakdown above). Below the 70%+ target — flagged honestly rather than inflated.
+Coverage report: 28.1% total, 100%/60% on `AuthProvider`/`PostProvider` respectively. Below the 70%+ target I was aiming for — flagging that honestly here rather than inflating it.
 
 ---
 
-## 📌 Known Limitations / Assumptions
+## Known limitations
 
-- **"Forgot password?" and "Sign up" are inert** on the login screen (no dialog, no navigation) — a "coming soon" dialog existed at one point and was dropped during layout cleanup; should be restored before this ships anywhere real.
-- **The JWT is stored and validated but not attached to requests, and session expiry is only detected at app launch.** `accessToken` is persisted and checked against `GET /auth/me` on restore, but it's never sent as an `Authorization` header on `/posts`/`/posts/search` calls, since those DummyJSON endpoints don't require auth. A practical consequence: `AuthProvider.isLoggedIn` is just an in-memory `user != null` check — once you're logged in, nothing re-validates the token against the server for the rest of that app session. If the token expires while the app stays open (e.g. testing with a short `expiresInMins`), browsing/searching/refreshing the post list, or opening the profile screen, all keep working normally with the dead token — expiry is only ever caught the *next time the app is cold-launched*, when `restoreSession()` runs its `/auth/me` check again. Fixing this properly would mean attaching the token to every request and reacting to a 401 with a forced logout, and/or periodically re-checking `/auth/me` on a timer while the app is active — neither is implemented.
-- **`API_BASE_URL` doesn't differ across environments** — see Build Configuration above; this matches the assignment's own stated values, not an oversight.
-- **Repository pattern is a lighter version of the spec's "interface → impl → remote/local data sources" description** — no separate remote-data-source class exists distinct from the repository `*Impl`.
-- **No typed `Failure` class hierarchy** — plain friendly-`String` error messages are used instead throughout.
-- **Scope is Login → Post List → Post Detail (+ minimal Profile) only** — the Figma file's Dashboard/Friends/Followers/Chat frames were not built; they weren't described in the written spec.
-- **Unit test coverage is 28.1%, below the 70% target**, concentrated on the provider/state-management layer only — see Unit Testing Coverage above for the honest breakdown and reasoning.
-- **No native Android/iOS flavors** — the bonus flavor-splitting item was not attempted.
-- **Dark mode is implemented in the theme (`ThemeProvider`/`AppTheme.darkTheme`) but has no UI control to toggle it** — an earlier app-bar toggle button was removed during a design pass and not replaced.
+- **"Forgot password?" and "Sign up" are inert** on the login screen
+- **The JWT is stored and validated but not attached to requests, and session expiry is only detected at app launch.** DummyJSON's other endpoints don't require auth, so `AuthProvider.isLoggedIn` is really just an in-memory check — once you're logged in, nothing re-validates the token for the rest of that session. If the token expires while the app stays open, browsing/searching/opening the profile screen all keep working fine with a dead token — expiry is only ever caught the next time the app re-launches. Re-checking `/auth/me` on each screen would fix this but isn't implemented.
+- Simple repository pattern, plain-string error messages — no typed failure hierarchy.
+- Unit test coverage is 28.1%, below the 70% target, concentrated on the provider layer only.
+
+---
+
+## What's done
+
+**Auth** — login against DummyJSON, persisted + server-validated session, logout, validation and error handling.
+
+**Posts** — list matching the design (login/list/detail only, see Design above), debounced search, pagination, pull-to-refresh, detail screen, loading/empty/error states.
+
+**Architecture** — repository pattern (lighter version), Provider used throughout, async/await networking, reasonable separation of concerns.
+
+**Config & testing** — three environment configs (dev/staging/prod); unit tests at 28.1% coverage (target was 70%+); auth error paths tested, repository/model edge cases not.
 
 ---
 
@@ -184,4 +181,5 @@ Matched the Figma file's login screen closely: color palette values were sampled
 ### 📋 Documentation & Quality
 - [x] Clean, readable code
 - [x] README with setup instructions
-- [X] Demo video included
+- [x] Demo video included
+
