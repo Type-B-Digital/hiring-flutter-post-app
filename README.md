@@ -184,4 +184,4 @@ Matched the Figma file's login screen closely: color palette values were sampled
 ### 📋 Documentation & Quality
 - [x] Clean, readable code
 - [x] README with setup instructions
-- [ ] Demo video included
+- [X] Demo video included
