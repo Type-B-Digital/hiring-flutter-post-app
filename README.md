@@ -182,4 +182,3 @@ Coverage report: 28.1% total, 100%/60% on `AuthProvider`/`PostProvider` respecti
 - [x] Clean, readable code
 - [x] README with setup instructions
 - [x] Demo video included
-
